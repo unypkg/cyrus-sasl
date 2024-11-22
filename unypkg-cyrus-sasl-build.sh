@@ -11,7 +11,7 @@ set -vx
 wget -qO- uny.nu/pkg | bash -s buildsys
 
 ### Installing build dependencies
-#unyp install python expat openssl
+unyp install lmdb
 
 #pip3_bin=(/uny/pkg/python/*/bin/pip3)
 #"${pip3_bin[0]}" install --upgrade pip
@@ -35,13 +35,13 @@ mkdir -pv /uny/sources
 cd /uny/sources || exit
 
 pkgname="cyrus-sasl"
-pkggit="https://github.com/cyrus-sasl/cyrus-sasl.git refs/tags/*"
+pkggit="https://github.com/cyrusimap/cyrus-sasl refs/tags/*"
 gitdepth="--depth=1"
 
 ### Get version info from git remote
 # shellcheck disable=SC2086
-latest_head="$(git ls-remote --refs --tags --sort="v:refname" $pkggit | grep -E "v[0-9.]+$" | tail --lines=1)"
-latest_ver="$(echo "$latest_head" | grep -o "v[0-9.].*" | sed "s|v||")"
+latest_head="$(git ls-remote --refs --tags --sort="v:refname" $pkggit | grep -E "cyrus-sasl-[0-9.]+$" | tail --lines=1)"
+latest_ver="$(echo "$latest_head" | grep -o "cyrus-sasl-[0-9.].*" | sed "s|cyrus-sasl-||")"
 latest_commit_id="$(echo "$latest_head" | cut --fields=1)"
 
 version_details
@@ -77,12 +77,23 @@ get_include_paths
 
 unset LD_RUN_PATH
 
-./configure \
-    --prefix=/uny/pkg/"$pkgname"/"$pkgver"
+sed '/saslint/a #include <time.h>' -i lib/saslutil.c &&
+    sed '/plugin_common/a #include <time.h>' -i plugins/cram.c
 
-make -j"$(nproc)"
-make -j"$(nproc)" check 
-make -j"$(nproc)" install
+./autogen.sh
+
+./configure \
+    --prefix=/uny/pkg/"$pkgname"/"$pkgver" \
+    --sysconfdir=/etc/uny \
+    --enable-auth-sasldb \
+    --with-dblib=lmdb \
+    --with-dbpath=/var/lib/sasl/sasldb2 \
+    --with-sphinx-build=no \
+    --with-saslauthd=/var/run/saslauthd
+
+make -j1
+
+make -j1 install
 
 ####################################################
 ### End of individual build script
